@@ -25,8 +25,10 @@ OPTIMIZE_INTERVAL = 10
 
 class Mallet:
     def __init__(self, path, corpus=None, num_topics=200, bigrams=False,
-                 iters=1000, prefix=None):
+                 iters=1000, prefix=None, remove_stopwords=True,
+                 topical_n_grams=False, print_output=False, file=""):
         self.path = path
+        self.print_output = print_output
 
         if prefix:
             self.prefix = prefix
@@ -56,7 +58,7 @@ class Mallet:
         self.params = [0 for i in range(num_topics)]
 
         if not os.path.exists(self.wtfile) or not os.path.exists(self.dtfile):
-            self.read(corpus, bigrams)
+            self.read(corpus, bigrams, file=file)
             self.train(num_topics, iters)
 
         self.load_keys()
@@ -67,22 +69,34 @@ class Mallet:
         self.load_scores()
 
 
-    def read(self, corpus, bigrams=False):
+    def read(self, corpus, bigrams=False, remove_stopwords=True, topical_n_grams=False, file=""):
         stop = StopLexicon()
-
-        cmd = [self.path, 'import-dir',
-               '--input', corpus,
+        stderr = None
+        stdout = None
+        c = 'import-file' if file else 'import-dir'
+        input = file if file else corpus
+        cmd = [self.path, c,
+               '--input', input,
                '--output', self.mallet_corpus,
-               '--remove-stopwords',
-               '--extra-stopwords', stop.file,
                '--token-regex', '[^\\s]+']
-
+        if remove_stopwords:
+            cmd += ['--remove-stopwords', '--extra-stopwords', stop.file]
+        if topical_n_grams:
+            cmd += ['--xml-topic-report', 'output_tng.xml']
         if bigrams:
-            cmd += ['--keep-sequence-bigrams', '--gram-sizes 2']
+            cmd += ['--keep-sequence-bigrams']
+            if not file: cmd += ['--gram-sizes', '2']
         else:
             cmd += ['--keep-sequence']
 
-        if subprocess.call(cmd) != 0:
+        if file:
+            cmd += ['--line-regex', '^(.*)[\t]([0-9]{4})[\t](.*)$']
+
+        if self.print_output:
+            cmd += ['--print-output']
+            stdout = open(os.path.join(self.prefix, "corpus.txt"),"wb")
+            print("Corpus text file writing to", stdout)
+        if subprocess.call(cmd, stderr=stderr, stdout=stdout) != 0:
             sys.stderr.write('Mallet import-dir failed.\n')
             print(cmd, file=sys.stderr)
             sys.exit(1)
@@ -115,6 +129,7 @@ class Mallet:
                '--input', corpus,
                '--output', self.mallet_corpus + '-infer',
                '--use-pipe-from', self.mallet_corpus]
+
         if subprocess.call(cmd) != 0:
             sys.stderr.write('Mallet import-dir failed.\n')
             sys.exit(1)
@@ -244,9 +259,9 @@ class Mallet:
         num_topics = len(self.topics)
 
         if not os.path.exists(self.namefile):
-            self.names = [' '.join([x for x in sorted(self.topics[i],
-                                                      key=lambda z: z[1],
-                                                      reverse=True)[:3]])
+            self.names = [' '.join([x[0] for x in sorted(self.topics[i].items(),
+                                                         key=lambda z: z[1],
+                                                         reverse=True)[:3]])
                           for i in range(num_topics)]
             return
 
