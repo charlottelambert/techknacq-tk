@@ -153,11 +153,15 @@ class Document:
 
         if fname and form == 'text':
             st = SentTokenizer()
-            self.sections = [{'text': st.tokenize(open(fname).read())}]
+            text = open(fname).read().split()
+            text = " ".join([word for word in text if not word[0].isdigit()])
+            content = st.tokenize(text)
+            self.sections = [{'text': content}]
         elif text and form == 'tsv':
             st = SentTokenizer()
             id, year, t = text.split("\t")
             sents = st.tokenize(t)
+            sents
             self.sections = [{'text': sents}]
             self.year = year
             self.id = id
@@ -269,7 +273,7 @@ class Document:
             words = []
             for x in re.split(r'[^a-zA-Z0-9_#-]+', s):
                 if len(x) > 0 and not x in stop and not x.lower() in stop \
-                   and re.search('[a-zA-Z0-9]', x):
+                   and re.search('[a-zA-Z0-9]', x) and not x[0].isdigit():
                     words.append(x)
             for w1, w2 in bigrams(words):
                 if good_word(w1) and good_word(w2):

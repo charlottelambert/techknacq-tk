@@ -8,7 +8,7 @@ import random
 import re
 import subprocess
 import multiprocessing as mp
-
+import math
 from numpy import zeros
 from itertools import combinations
 
@@ -26,7 +26,8 @@ OPTIMIZE_INTERVAL = 10
 class Mallet:
     def __init__(self, path, corpus=None, num_topics=200, bigrams=False,
                  iters=1000, prefix=None, remove_stopwords=True,
-                 topical_n_grams=False, print_output=False, file=""):
+                 topical_n_grams=False, print_output=False, file="",
+                 min_df=0, max_df=1.0, num_files=None):
         self.path = path
         self.print_output = print_output
 
@@ -59,6 +60,9 @@ class Mallet:
 
         if not os.path.exists(self.wtfile) or not os.path.exists(self.dtfile):
             self.read(corpus, bigrams, file=file)
+            if num_files and min_df and max_df <= 1.0:
+                print("About to prune!!!!")
+                self.prune(min_df, max_df, num_files, corpus, file)
             self.train(num_topics, iters)
 
         self.load_keys()
@@ -68,6 +72,24 @@ class Mallet:
         self.load_names()
         self.load_scores()
 
+
+    def prune(self, min_df, max_df, num_files, corpus, file):
+        stderr = None
+        stdout = None
+        # Swap max and min for some reason
+        # max_idf = math.log10(num_files/min_df) #num_files/min_df
+        min_idf =  math.log2(1/max_df)
+        input = file if file else corpus
+
+        cmd = [self.path, 'prune',
+               '--input', self.mallet_corpus,
+               '--output', self.mallet_corpus,
+               '--min-idf', str(min_idf), '--prune-document-freq', str(min_df)]
+
+        if subprocess.call(cmd, stderr=stderr, stdout=stdout) != 0:
+            sys.stderr.write('Mallet prune failed.\n')
+            print(cmd, file=sys.stderr)
+            sys.exit(1)
 
     def read(self, corpus, bigrams=False, remove_stopwords=True, topical_n_grams=False, file=""):
         stop = StopLexicon()
@@ -97,7 +119,7 @@ class Mallet:
             stdout = open(os.path.join(self.prefix, "corpus.txt"),"wb")
             print("Corpus text file writing to", stdout)
         if subprocess.call(cmd, stderr=stderr, stdout=stdout) != 0:
-            sys.stderr.write('Mallet import-dir failed.\n')
+            sys.stderr.write('Mallet', c, 'failed.\n')
             print(cmd, file=sys.stderr)
             sys.exit(1)
 
